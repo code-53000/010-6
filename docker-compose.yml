@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: oilpress-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: oilpress2024
+      MYSQL_DATABASE: oilpress
+      TZ: Asia/Shanghai
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-poilpress2024"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed-queue-core:
+    build: ./seed-queue-core
+    container_name: oilpress-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: oilpress2024
+      DB_NAME: oilpress
+      SERVER_PORT: 8080
+      TZ: Asia/Shanghai
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  oilpress-counter:
+    build: ./oilpress-counter
+    container_name: oilpress-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - seed-queue-core
+
+volumes:
+  mysql-data:
