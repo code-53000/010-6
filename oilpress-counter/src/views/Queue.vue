@@ -77,22 +77,64 @@
             <el-table-column prop="created_at" label="登记时间" width="170">
               <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
             </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template #default="{ row }">
+                <el-button size="small" type="primary" link @click="openPrintDialog(row)">打印小票</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog
+      v-model="printDialogVisible"
+      title="打印小票"
+      width="480px"
+      :close-on-click-modal="false"
+      class="no-print-header"
+    >
+      <div class="paper-size-select no-print" style="margin-bottom: 16px;">
+        <span style="margin-right: 12px;">纸张规格：</span>
+        <el-radio-group v-model="paperSize">
+          <el-radio-button value="80mm">80mm 小票纸</el-radio-button>
+          <el-radio-button value="a5">A5 半页</el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <div style="border: 1px solid #e4e7ed; padding: 10px; background: #fafafa; border-radius: 4px;">
+        <PrintReceipt :order-data="currentOrder" :paper-size="paperSize" ref="printReceiptRef" />
+      </div>
+
+      <template #footer>
+        <div class="no-print">
+          <el-button @click="printDialogVisible = false">关闭</el-button>
+          <el-button type="primary" @click="doPrint">
+            <el-icon><Printer /></el-icon>
+            <span>打印小票</span>
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { createOrder, getOrderList, calculateFee } from '../api'
+import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Printer } from '@element-plus/icons-vue'
+import { createOrder, getOrderList, calculateFee, getOrder } from '../api'
+import PrintReceipt from '../components/PrintReceipt.vue'
 
 const formRef = ref()
 const loading = ref(false)
 const orders = ref([])
 const preview = reactive({ expected_oil: 0, processing_fee: 0 })
+
+const printDialogVisible = ref(false)
+const printReceiptRef = ref(null)
+const paperSize = ref('80mm')
+const currentOrder = ref({})
 
 const rules = {
   farmer_name: [
@@ -135,6 +177,24 @@ const calcFee = async () => {
   } catch (e) {}
 }
 
+const openPrintDialog = async (row) => {
+  try {
+    const res = await getOrder(row.id)
+    currentOrder.value = res.data
+  } catch (e) {
+    currentOrder.value = { ...row }
+  }
+  paperSize.value = '80mm'
+  printDialogVisible.value = true
+}
+
+const doPrint = async () => {
+  await nextTick()
+  setTimeout(() => {
+    window.print()
+  }, 100)
+}
+
 const submit = async () => {
   try {
     await formRef.value.validate()
@@ -145,10 +205,34 @@ const submit = async () => {
   loading.value = true
   try {
     const res = await createOrder(form)
-    ElMessage.success(`登记成功！排队号：${res.data.queue_number}`)
+    const newOrder = res.data
+    ElMessage.success(`登记成功！排队号：${newOrder.queue_number}`)
     reset()
     loadList()
+
+    try {
+      await ElMessageBox.confirm(
+        `登记成功！排队号：${newOrder.queue_number}\n是否打印小票？`,
+        '打印小票',
+        {
+          confirmButtonText: '打印小票',
+          cancelButtonText: '不打印',
+          type: 'success',
+          distinguishCancelAndClose: true
+        }
+      )
+      try {
+        const detailRes = await getOrder(newOrder.id)
+        currentOrder.value = detailRes.data
+      } catch (e) {
+        currentOrder.value = newOrder
+      }
+      paperSize.value = '80mm'
+      printDialogVisible.value = true
+    } catch (e) {
+    }
   } catch (e) {
+    if (e === 'cancel' || e === 'close') return
     const msg = e?.response?.data?.error
     if (msg && msg.includes('required')) {
       ElMessage.error('必填项未填完整：' + msg)
