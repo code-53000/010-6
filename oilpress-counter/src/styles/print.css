@@ -31,6 +31,10 @@
     width: 100%;
   }
 
+  .receipt-container.a5-size {
+    page: a5;
+  }
+
   .no-print,
   .no-print * {
     display: none !important;

@@ -90,7 +90,7 @@
     <el-dialog
       v-model="printDialogVisible"
       title="打印小票"
-      width="480px"
+      :width="paperSize === 'a5' ? '620px' : '480px'"
       :close-on-click-modal="false"
       class="no-print-header"
     >
